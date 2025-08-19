@@ -76,10 +76,8 @@ export class GameLogic {
     
     this.placeEntity(this.flashlight);
     
-    // Place dragon
-    this.spawnDragon();
-    
-    // Place keys
+    // Skip dragon for now, but enable keys
+    // this.spawnDragon();
     this.placeKeys();
     
     // Reset timers using performance.now()
@@ -180,14 +178,15 @@ export class GameLogic {
     // Calculate elapsed time in seconds since game start
     const elapsedTimeSeconds = (currentTimeMs - this.gameStartTime) / 1000;
     this.gameLevel.timeRemaining = Math.max(0, GAME_CONSTANTS.TIME_LEVEL_INIT_TIME_SECONDS - elapsedTimeSeconds);
-    
-    // Check game over conditions
+
+    // Simple game over check
     if (this.gameLevel.timeRemaining <= 0) {
-      this.fillBoardWithBlocks();
       this.gameState = GameState.GAME_OVER;
       return;
     }
     
+    // Skip all other game logic for now
+    /*
     // Spawn blocks periodically
     if (currentTimeMs - this.lastBlockSpawnTime >= GAME_CONSTANTS.TIME_NEW_BLOCK_INTERVAL_MS) {
       this.spawnBlock();
@@ -212,6 +211,7 @@ export class GameLogic {
     if (!this.dragon && currentTimeMs >= this.dragonRespawnTime) {
       this.spawnDragon();
     }
+    */
   }
 
   private spawnBlock(): void {
