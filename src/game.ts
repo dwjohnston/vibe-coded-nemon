@@ -8,9 +8,9 @@ export class Game {
   private renderer: Renderer;
   private inputHandler: InputHandler;
   private settings: GameSettings;
-  private lastUpdateTime: number = 0;
   private lastMoveTime: number = 0;
   private animationId: number = 0;
+  private gameStarted: boolean = false;
   
   // UI Elements
   private stageElement: HTMLElement;
@@ -48,51 +48,53 @@ export class Game {
     this.inputHandler = new InputHandler();
 
     // Start game loop
-    this.lastUpdateTime = performance.now();
     this.gameLoop();
   }
 
   private gameLoop = (): void => {
     const currentTime = performance.now();
-    const deltaTime = currentTime - this.lastUpdateTime;
-    this.lastUpdateTime = currentTime;
+    
+    // Skip first frame to avoid setup issues
+    if (!this.gameStarted) {
+      this.gameStarted = true;
+      this.animationId = requestAnimationFrame(this.gameLoop);
+      return;
+    }
 
-    this.update(deltaTime);
+    this.update(currentTime);
     this.render();
     this.updateUI();
 
     this.animationId = requestAnimationFrame(this.gameLoop);
   };
 
-  private update(deltaTime: number): void {
-    const currentTime = Date.now();
-    
+  private update(currentTime: number): void {
     // Handle input
     this.handleInput(currentTime);
     
     // Update game logic
-    this.gameLogic.update(deltaTime);
+    this.gameLogic.update(currentTime);
     
     // Handle firing
-    this.gameLogic.updateFiring();
+    this.gameLogic.updateFiring(currentTime);
   }
 
   private handleInput(currentTime: number): void {
     const gameState = this.gameLogic.getGameState();
     if (gameState !== GameState.PLAYING) return;
 
-    // Handle movement
+    // Handle movement (convert to milliseconds for comparison with Date.now())
     const movementDirection = this.inputHandler.getMovementDirection();
-    if (movementDirection && this.canMove(currentTime)) {
+    if (movementDirection && this.canMove(Date.now())) {
       if (this.gameLogic.movePlayer(movementDirection)) {
-        this.lastMoveTime = currentTime;
+        this.lastMoveTime = Date.now();
       }
     }
 
     // Handle firing
     const isFiring = this.inputHandler.isFirePressed();
     if (isFiring) {
-      this.gameLogic.startFiring();
+      this.gameLogic.startFiring(currentTime);
     } else {
       this.gameLogic.stopFiring();
     }
@@ -158,7 +160,6 @@ export class Game {
 
   resume(): void {
     if (!this.animationId) {
-      this.lastUpdateTime = performance.now();
       this.gameLoop();
     }
   }

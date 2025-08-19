@@ -25,6 +25,7 @@ export class GameLogic {
   private serialDestroyCount: number = 0;
   private fireStartTime: number = 0;
   private destroyingBlocks: boolean = false;
+  private gameStartTime: number = 0;
 
   constructor() {
     this.board = this.createEmptyBoard();
@@ -38,6 +39,7 @@ export class GameLogic {
       score: 0
     };
     this.gameState = GameState.PLAYING;
+    this.gameStartTime = performance.now();
     this.initializeLevel();
   }
 
@@ -80,10 +82,11 @@ export class GameLogic {
     // Place keys
     this.placeKeys();
     
-    // Reset timers
-    this.lastBlockSpawnTime = Date.now();
-    this.lastDragonMoveTime = Date.now();
-    this.lastDragonFireTime = Date.now();
+    // Reset timers using performance.now()
+    const currentTime = performance.now();
+    this.lastBlockSpawnTime = currentTime;
+    this.lastDragonMoveTime = currentTime;
+    this.lastDragonFireTime = currentTime;
   }
 
   private clearBoard(): void {
@@ -99,11 +102,17 @@ export class GameLogic {
     
     let position: Position;
     let attempts = 0;
+    let isAdjacentToFlashlight = false;
     
     do {
       position = Utils.getRandomPosition(this.board.width, this.board.height);
       attempts++;
-    } while (this.board.tiles[position.y][position.x] !== null && attempts < 100);
+      
+      // Make sure dragon doesn't spawn adjacent to flashlight
+      isAdjacentToFlashlight = this.flashlight !== null && 
+        Utils.getDistance(position, this.flashlight.position) <= 2;
+        
+    } while ((this.board.tiles[position.y][position.x] !== null || isAdjacentToFlashlight) && attempts < 100);
     
     if (attempts < 100) {
       this.dragon = {
@@ -114,6 +123,9 @@ export class GameLogic {
       };
       
       this.placeEntity(this.dragon);
+      
+      // Give the dragon a 1 second buffer before it can fire
+      this.lastDragonFireTime = performance.now() + 1000;
     }
   }
 
@@ -162,22 +174,12 @@ export class GameLogic {
     }
   }
 
-  update(deltaTime: number): void {
+  update(currentTimeMs: number): void {
     if (this.gameState !== GameState.PLAYING) return;
     
-    const currentTime = Date.now();
-    
-    // Cap delta time to prevent large jumps (like when page loads)
-    const cappedDelta = Math.min(deltaTime, 100); // Max 100ms per frame
-    
-    // Update timer
-    const timeDecrement = cappedDelta / 1000;
-    this.gameLevel.timeRemaining -= timeDecrement;
-    
-    // Debug logging (remove in production)
-    if (cappedDelta > 16) { // Log only if frame time is unusually high
-      console.log(`Delta: ${deltaTime}ms, Capped: ${cappedDelta}ms, Time remaining: ${this.gameLevel.timeRemaining}s`);
-    }
+    // Calculate elapsed time in seconds since game start
+    const elapsedTimeSeconds = (currentTimeMs - this.gameStartTime) / 1000;
+    this.gameLevel.timeRemaining = Math.max(0, GAME_CONSTANTS.TIME_LEVEL_INIT_TIME_SECONDS - elapsedTimeSeconds);
     
     // Check game over conditions
     if (this.gameLevel.timeRemaining <= 0) {
@@ -187,28 +189,27 @@ export class GameLogic {
     }
     
     // Spawn blocks periodically
-    if (currentTime - this.lastBlockSpawnTime >= GAME_CONSTANTS.TIME_NEW_BLOCK_INTERVAL_MS) {
+    if (currentTimeMs - this.lastBlockSpawnTime >= GAME_CONSTANTS.TIME_NEW_BLOCK_INTERVAL_MS) {
       this.spawnBlock();
-      this.lastBlockSpawnTime = currentTime;
+      this.lastBlockSpawnTime = currentTimeMs;
     }
     
     // Update dragon
-    this.updateDragon(currentTime);
+    this.updateDragon(currentTimeMs);
     
     // Update fires
-    this.updateFires(currentTime);
+    this.updateFires(currentTimeMs);
     
     // Update fireballs
-    this.updateFireballs(currentTime);
+    this.updateFireballs(currentTimeMs);
     
     // Check level completion
     if (this.gameLevel.keysCollected >= this.gameLevel.keysRequired) {
-      console.log(`Level complete! Keys: ${this.gameLevel.keysCollected}/${this.gameLevel.keysRequired}`);
       this.completeLevel();
     }
     
     // Respawn dragon if needed
-    if (!this.dragon && currentTime >= this.dragonRespawnTime) {
+    if (!this.dragon && currentTimeMs >= this.dragonRespawnTime) {
       this.spawnDragon();
     }
   }
@@ -302,6 +303,7 @@ export class GameLogic {
     
     if (targetPos.x === flashlightPos.x && targetPos.y === flashlightPos.y) {
       // Dragon kills player
+      console.log('Game over: Dragon killed player');
       this.gameState = GameState.GAME_OVER;
       return;
     }
@@ -320,7 +322,7 @@ export class GameLogic {
       position: { ...dragonPos },
       direction: this.dragon.direction!,
       id: Utils.generateId(),
-      createdAt: Date.now()
+      createdAt: performance.now()
     };
     
     this.entities.set(fireball.id!, fireball);
@@ -358,8 +360,8 @@ export class GameLogic {
         type: EntityType.FIRE,
         position: fireball.position,
         id: Utils.generateId(),
-        createdAt: Date.now(),
-        destroyAt: Date.now() + Utils.getRandomInt(
+        createdAt: performance.now(),
+        destroyAt: performance.now() + Utils.getRandomInt(
           GAME_CONSTANTS.TIME_FIRE_BURN_MIN_MS,
           GAME_CONSTANTS.TIME_FIRE_BURN_MAX_MS
         )
@@ -396,6 +398,7 @@ export class GameLogic {
       
       if (this.gameLevel.stage > GAME_CONSTANTS.STAGES_COUNT) {
         // Game complete
+        console.log('Game complete: All stages finished');
         this.gameState = GameState.GAME_OVER;
         return;
       }
@@ -405,6 +408,9 @@ export class GameLogic {
     this.gameLevel.keysRequired = GAME_CONSTANTS.INITIAL_KEYS_COUNT + (this.gameLevel.level - 1);
     this.gameLevel.keysCollected = 0;
     this.gameLevel.timeRemaining = GAME_CONSTANTS.TIME_LEVEL_INIT_TIME_SECONDS;
+    
+    // Reset game start time for new level
+    this.gameStartTime = performance.now();
     
     this.initializeLevel();
   }
@@ -457,22 +463,21 @@ export class GameLogic {
     this.gameLevel.score += GAME_CONSTANTS.POINTS_COLLECT_KEY;
   }
 
-  startFiring(): void {
+  startFiring(currentTime: number): void {
     if (this.gameState !== GameState.PLAYING) return;
     
     this.destroyingBlocks = true;
     this.serialDestroyCount = 0;
-    this.fireStartTime = Date.now();
+    this.fireStartTime = currentTime;
   }
 
   stopFiring(): void {
     this.destroyingBlocks = false;
   }
 
-  updateFiring(): void {
+  updateFiring(currentTime: number): void {
     if (!this.destroyingBlocks || !this.flashlight) return;
     
-    const currentTime = Date.now();
     const beamPositions = this.getFlashlightBeam();
     
     // Check if enough time has passed to destroy next block
@@ -484,13 +489,13 @@ export class GameLogic {
       
       if (targetPosition) {
         const targetEntity = this.board.tiles[targetPosition.y][targetPosition.x]!;
-        this.destroyEntity(targetEntity);
+        this.destroyEntity(targetEntity, currentTime);
         this.fireStartTime = currentTime;
       }
     }
   }
 
-  private destroyEntity(entity: GameEntity): void {
+  private destroyEntity(entity: GameEntity, currentTime: number): void {
     let points = 0;
     
     if (entity.type === EntityType.BLOCK) {
@@ -499,7 +504,7 @@ export class GameLogic {
     } else if (entity.type === EntityType.DRAGON) {
       points = GAME_CONSTANTS.POINTS_DESTROY_DRAGON;
       this.dragon = null;
-      this.dragonRespawnTime = Date.now() + (GAME_CONSTANTS.TIME_DRAGON_RESPAWN_SECONDS * 1000);
+      this.dragonRespawnTime = currentTime + (GAME_CONSTANTS.TIME_DRAGON_RESPAWN_SECONDS * 1000);
     }
     
     // Apply serial destroy bonus
