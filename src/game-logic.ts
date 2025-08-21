@@ -76,7 +76,7 @@ export class GameLogic {
     
     this.placeEntity(this.flashlight);
     
-    // Temporarily disable dragon to test other fixes
+    // Temporarily disable dragon until firing logic is fixed
     // this.spawnDragon();
     this.placeKeys();
     
@@ -106,9 +106,9 @@ export class GameLogic {
       position = Utils.getRandomPosition(this.board.width, this.board.height);
       attempts++;
       
-      // Make sure dragon doesn't spawn adjacent to flashlight
+      // Make sure dragon doesn't spawn too close to flashlight
       isAdjacentToFlashlight = this.flashlight !== null && 
-        Utils.getDistance(position, this.flashlight.position) <= 2;
+        Utils.getDistance(position, this.flashlight.position) <= 3;
         
     } while ((this.board.tiles[position.y][position.x] !== null || isAdjacentToFlashlight) && attempts < 100);
     
@@ -122,8 +122,8 @@ export class GameLogic {
       
       this.placeEntity(this.dragon);
       
-      // Give the dragon a 1 second buffer before it can fire
-      this.lastDragonFireTime = performance.now() + 1000;
+      // Set dragon fire time to current time - dragon won't fire for the first TIME_DRAGON_FIRE_MS milliseconds
+      this.lastDragonFireTime = performance.now();
     }
   }
 
@@ -205,7 +205,7 @@ export class GameLogic {
       this.completeLevel();
     }
     
-    // Temporarily disable dragon respawn
+    // Temporarily disable dragon respawn until firing logic is fixed
     /*
     // Respawn dragon if needed
     if (!this.dragon && currentTimeMs >= this.dragonRespawnTime) {
