@@ -76,7 +76,7 @@ export class GameLogic {
     
     this.placeEntity(this.flashlight);
     
-    // Skip dragon for now, but enable keys
+    // Temporarily disable dragon to test other fixes
     // this.spawnDragon();
     this.placeKeys();
     
@@ -179,14 +179,12 @@ export class GameLogic {
     const elapsedTimeSeconds = (currentTimeMs - this.gameStartTime) / 1000;
     this.gameLevel.timeRemaining = Math.max(0, GAME_CONSTANTS.TIME_LEVEL_INIT_TIME_SECONDS - elapsedTimeSeconds);
 
-    // Simple game over check
-    if (this.gameLevel.timeRemaining <= 0) {
+    // Simple game over check (for now, only check after reasonable time to avoid race conditions)
+    if (this.gameLevel.timeRemaining <= 0 && elapsedTimeSeconds > 1) {
       this.gameState = GameState.GAME_OVER;
       return;
     }
     
-    // Skip all other game logic for now
-    /*
     // Spawn blocks periodically
     if (currentTimeMs - this.lastBlockSpawnTime >= GAME_CONSTANTS.TIME_NEW_BLOCK_INTERVAL_MS) {
       this.spawnBlock();
@@ -207,6 +205,8 @@ export class GameLogic {
       this.completeLevel();
     }
     
+    // Temporarily disable dragon respawn
+    /*
     // Respawn dragon if needed
     if (!this.dragon && currentTimeMs >= this.dragonRespawnTime) {
       this.spawnDragon();
@@ -560,4 +560,9 @@ export class GameLogic {
   getBoard(): GameBoard { return this.board; }
   getGameLevel(): GameLevel { return { ...this.gameLevel }; }
   getGameState(): GameState { return this.gameState; }
+  
+  // Reset game start time to fix timing issues
+  resetGameStartTime(currentTime: number): void {
+    this.gameStartTime = currentTime;
+  }
 }

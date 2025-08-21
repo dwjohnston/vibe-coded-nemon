@@ -11,6 +11,7 @@ export class Game {
   private lastMoveTime: number = 0;
   private animationId: number = 0;
   private gameStarted: boolean = false;
+  private gameOverHandled: boolean = false;
   
   // UI Elements
   private stageElement: HTMLElement;
@@ -54,9 +55,11 @@ export class Game {
   private gameLoop = (): void => {
     const currentTime = performance.now();
     
-    // Skip first frame to avoid setup issues
+    // Skip first frame to avoid setup issues and reset game start time
     if (!this.gameStarted) {
       this.gameStarted = true;
+      // Reset game start time to avoid timing issues
+      this.gameLogic.resetGameStartTime(currentTime);
       this.animationId = requestAnimationFrame(this.gameLoop);
       return;
     }
@@ -131,15 +134,15 @@ export class Game {
 
   private handleGameOver(): void {
     // Only handle game over once
-    if (this.animationId === 0) return;
+    if (this.gameOverHandled) return;
+    
+    this.gameOverHandled = true;
     
     // Stop the game loop
-    if (this.animationId) {
-      cancelAnimationFrame(this.animationId);
-      this.animationId = 0;
-    }
+    cancelAnimationFrame(this.animationId);
+    this.animationId = 0;
 
-    // Show game over message
+    // Show game over message after a small delay to ensure rendering is complete
     setTimeout(() => {
       const gameLevel = this.gameLogic.getGameLevel();
       const message = gameLevel.stage > GAME_CONSTANTS.STAGES_COUNT 
@@ -147,7 +150,7 @@ export class Game {
         : `Game Over!\nFinal Score: ${gameLevel.score}\n\nPress F5 to restart`;
       
       alert(message);
-    }, 100);
+    }, 500);
   }
 
   // Public methods for external control if needed
