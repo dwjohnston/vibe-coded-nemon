@@ -76,8 +76,8 @@ export class GameLogic {
     
     this.placeEntity(this.flashlight);
     
-    // Temporarily disable dragon until firing logic is fixed
-    // this.spawnDragon();
+    // Spawn dragon and place keys with improved logic
+    this.spawnDragon();
     this.placeKeys();
     
     // Reset timers using performance.now()
@@ -117,7 +117,8 @@ export class GameLogic {
         type: EntityType.DRAGON,
         position,
         direction: Utils.getRandomDirection(),
-        id: Utils.generateId()
+        id: Utils.generateId(),
+        createdAt: performance.now()
       };
       
       this.placeEntity(this.dragon);
@@ -205,13 +206,10 @@ export class GameLogic {
       this.completeLevel();
     }
     
-    // Temporarily disable dragon respawn until firing logic is fixed
-    /*
     // Respawn dragon if needed
     if (!this.dragon && currentTimeMs >= this.dragonRespawnTime) {
       this.spawnDragon();
     }
-    */
   }
 
   private spawnBlock(): void {
@@ -258,8 +256,10 @@ export class GameLogic {
       this.lastDragonMoveTime = currentTime;
     }
     
-    // Dragon firing
-    if (currentTime - this.lastDragonFireTime >= GAME_CONSTANTS.TIME_DRAGON_FIRE_MS) {
+    // Dragon firing - ensure dragon has been alive for at least 2 seconds before firing
+    const timeSinceSpawn = currentTime - (this.dragon.createdAt || currentTime);
+    if (timeSinceSpawn >= 2000 && 
+        currentTime - this.lastDragonFireTime >= GAME_CONSTANTS.TIME_DRAGON_FIRE_MS) {
       this.dragonFire();
       this.lastDragonFireTime = currentTime;
     }
@@ -296,36 +296,42 @@ export class GameLogic {
   private dragonFire(): void {
     if (!this.dragon || !this.flashlight) return;
     
-    // Check if dragon is adjacent to flashlight and facing it
+    // Only fire if dragon is directly adjacent and facing the target
     const dragonPos = this.dragon.position;
     const flashlightPos = this.flashlight.position;
     const targetPos = Utils.getPositionInDirection(dragonPos, this.dragon.direction!);
     
+    // Check if dragon is directly facing the flashlight (adjacent)
     if (targetPos.x === flashlightPos.x && targetPos.y === flashlightPos.y) {
-      // Dragon kills player
-      console.log('Game over: Dragon killed player');
-      this.gameState = GameState.GAME_OVER;
-      return;
+      // Dragon kills player only if they're directly adjacent and facing
+      const distance = Math.abs(dragonPos.x - flashlightPos.x) + Math.abs(dragonPos.y - flashlightPos.y);
+      if (distance === 1) {
+        console.log('Game over: Dragon killed player');
+        this.gameState = GameState.GAME_OVER;
+        return;
+      }
     }
     
-    // Check if dragon is adjacent to any other entity and facing it
+    // Check if target position has an entity to attack
     if (Utils.isValidPosition(targetPos, this.board.width, this.board.height) &&
         this.board.tiles[targetPos.y][targetPos.x] !== null) {
-      // Move instead of firing
+      // Move instead of firing if there's an obstruction
       this.moveDragon();
       return;
     }
     
-    // Fire fireball
-    const fireball: GameEntity = {
-      type: EntityType.FIREBALL,
-      position: { ...dragonPos },
-      direction: this.dragon.direction!,
-      id: Utils.generateId(),
-      createdAt: performance.now()
-    };
-    
-    this.entities.set(fireball.id!, fireball);
+    // Fire fireball only if path is clear
+    if (Utils.isValidPosition(targetPos, this.board.width, this.board.height)) {
+      const fireball: GameEntity = {
+        type: EntityType.FIREBALL,
+        position: { ...dragonPos },
+        direction: this.dragon.direction!,
+        id: Utils.generateId(),
+        createdAt: performance.now()
+      };
+      
+      this.entities.set(fireball.id!, fireball);
+    }
   }
 
   private updateFireballs(currentTime: number): void {
